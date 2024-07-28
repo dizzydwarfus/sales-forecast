@@ -3,3 +3,5 @@ __pycache__/
 sales_forecast_312
 scm_forecast_topic.ipynb
 *.log
+data/
+.DS_Store

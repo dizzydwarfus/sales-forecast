@@ -1,5 +1,17 @@
 import pandas as pd
+import numpy as np
 import requests
+from utils.access_token import AccessToken
+
+
+def generate_auth_header(domain: str, payload: dict) -> dict:
+    auth = AccessToken(domain=domain, payload=payload)
+    auth.generate_access_token()
+    auth_header = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {auth.access_token}",
+    }
+    return auth_header
 
 
 def flatten_dictionary(dict_to_flatten):
@@ -59,5 +71,78 @@ def get_data(
     all_data = pd.DataFrame(all_data)
     return all_data
 
+
 def format_euro(value):
     return f"€{value:,.0f}" if value >= 0 else f"-€{abs(value):,.0f}"
+
+
+def get_forecast_data(
+    domain: str, api_endpoint: str, auth_header: dict
+) -> pd.DataFrame:
+    forecast_query = """SELECT 
+    Account__c, Account__r.Name, CreatedDate, Date__c, Amount__c, CreatedById, CreatedBy.Name, Account__r.Region__c, CurrencyIsoCode, Business_line__c, Product_Family__c 
+    FROM Forecast__c 
+    WHERE Account__c != null
+    """
+    forecast_query = forecast_query.replace("\n", "").replace(" ", "+").strip()
+
+    raw_forecast_data = get_data(
+        domain=domain,
+        api_endpoint=api_endpoint,
+        query=forecast_query,
+        auth_header=auth_header,
+        val1="Account__r",
+        val2="CreatedBy",
+    )
+
+    raw_forecast_data["CreatedDate"] = pd.to_datetime(
+        raw_forecast_data["CreatedDate"], format="%Y-%m-%dT%H:%M:%S.000+0000"
+    )
+
+    raw_forecast_data["Date__c"] = pd.to_datetime(
+        raw_forecast_data["Date__c"], format="%Y-%m-%d"
+    )
+
+    raw_forecast_data = raw_forecast_data.dropna(subset=["Product_Family__c"])
+
+    return raw_forecast_data
+
+
+def get_sales_data(sales_path: str) -> pd.DataFrame:
+    sales_data = pd.read_csv(
+        filepath_or_buffer=sales_path, date_format="%d-%b-%y", parse_dates=["Date"]
+    )
+    sales_data = sales_data.pivot(
+        values="Measure Values",
+        columns=["Measure Names"],
+        index=[
+            "Account Id",
+            "Account Name",
+            "Business Line",
+            "Region",
+            "Channel",
+            "Product Family (Account Hierarchy)",
+            "Product Subfamily (Account Hierarchy)",
+            "Product Id",
+            "Local Item Code (Zita)",
+            "Local Item Description (Zita)",
+            "Date",
+        ],
+    ).reset_index()
+    sales_data = sales_data.rename(
+        columns={
+            "Product Family (Account Hierarchy)": "Product Family",
+            "Product Subfamily (Account Hierarchy)": "Product Subfamily",
+            "Local Item Code (Zita)": "Local Item Code",
+            "Local Item Description (Zita)": "Local Item Description",
+        }
+    )
+
+    sales_data["Business Line"] = (
+        sales_data["Business Line"].replace(np.nan, "Unallocated (Unallocated)").copy()
+    )
+    sales_data["BL Short"] = (
+        sales_data["Business Line"].str.findall(r"\((.*?)\)").str[0].copy()
+    )
+
+    return sales_data
