@@ -23,10 +23,11 @@ class TablesCreator:
         self.forecast_and_actuals = self.forecasted_sales_data.merge(
             self.resampled_sales_data[["ds", "y"]],
             on="ds",
-            how="inner",
+            how="left",
             suffixes=("_forecast", "_actual"),
         )
-        self.summary_table = self._create_summary_table()
+        # TODO: replace all nan with 0
+        self.summary_table, self.formatted_summary_table = self._create_summary_table()
         self.forecast_table, self.formatted_forecast = self._create_forecast_table(
             period=evaluation_period
         )
@@ -105,7 +106,57 @@ class TablesCreator:
         }
         summary_df = pd.DataFrame(summary_data)
 
-        return summary_df
+        formatted_summary = {
+            "Metric": [
+                "Total Sales",
+                "Average Sales",
+                "Sales Std Dev",
+                "Number of Days Ordered",
+                "Order Frequency",
+                "Median Sales",
+                "Total Transactions",
+                "Sales Variance",
+                "Average Order Value",
+                "Sales Skewness",
+                "Sales Kurtosis",
+                "Unique Customers",
+                "Repeat Customer Rate",
+            ],
+            "Value": [
+                format_euro(total_sales),
+                format_euro(average_sales),
+                format_euro(sales_std_dev),
+                f"{number_of_days_ordered:,.0f}",
+                round(order_frequency),
+                format_euro(median_sales),
+                f"{total_transactions:,.0f}",
+                format_euro(sales_variance),
+                format_euro(average_order_value),
+                round(sales_skewness),
+                round(sales_kurtosis),
+                f"{unique_customers:,.0f}",
+                f"{repeat_customer_rate:.0%}",
+            ],
+            "Unit": [
+                "€",
+                "€",
+                "€",
+                "days",
+                "orders/day",
+                "€",
+                "transactions",
+                "€",
+                "€",
+                "skewness",
+                "kurtosis",
+                "customers",
+                "%",
+            ],
+        }
+
+        formatted_summary_df = pd.DataFrame(formatted_summary)
+
+        return summary_df, formatted_summary_df
 
     def _create_forecast_table(self, period: str) -> pd.DataFrame:
         self.forecast_and_actuals["month"] = self.forecast_and_actuals[

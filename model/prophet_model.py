@@ -20,7 +20,7 @@ class SalesModel(Prophet):
     def __init__(
         self,
         *args,
-        sales_data: pd.DataFrame,
+        sales_data: pd.DataFrame = None,
         region: Literal["Europe", "Americas", "APAC"] = None,
         business_line: Literal["AES", "PBF", "LFS", "AMS"] = None,
         product_family: str = None,
@@ -28,9 +28,13 @@ class SalesModel(Prophet):
         sales_channel: Literal[
             "DISTRIBUTOR & RESELLER", "MACHINE MAKER", "INDUSTRY", "SERVICE BUREAU"
         ] = None,
+        target_col: Literal[
+            "Total Sales", "Material Quantity (kg)", "Quantity in SKUs"
+        ] = "Total Sales",
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.target_col = target_col
         self.filters = {
             "Region": region,
             "BL Short": business_line,
@@ -69,7 +73,7 @@ class SalesModel(Prophet):
     # post-init to format and process sales data
     def _post_init(self):
         self.data = self._filter_sales_data(
-            self._format_sales_data(self.data),
+            self._format_sales_data(self.data, self.target_col),
             self.filters,
         )
         self.grouped_data = self._group_sales_data(

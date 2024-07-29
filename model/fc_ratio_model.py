@@ -2,37 +2,36 @@
 import pandas as pd
 
 # Internal Imports
-from utils.utils import get_sales_data, get_forecast_data
+from utils.utils import get_forecast_data
 
 
 class ForecastRatioModel:
     def __init__(
         self,
-        sales_path: str,
+        sales_data: pd.DataFrame,
         domain: str,
         auth_header: dict,
         api_endpoint: str,
         forecast_query: str,
     ):
-        self.sales_path = sales_path
         self.domain = domain
         self.auth_header = auth_header
         self.api_endpoint = api_endpoint
         self.forecast_query = forecast_query
-        self.actual_data, self.forecast_data = self._get_data()
+        self.actual_data = sales_data
+        self.forecast_data = self._get_forecast_data()
         self.forecast_sku = None
         self.forecast_sku_actual_sales = None
 
-    def _get_data(
+    def _get_forecast_data(
         self,
     ):
-        self.actual_data = get_sales_data(self.sales_path)
         self.forecast_data = get_forecast_data(
             domain=self.domain,
             api_endpoint=self.api_endpoint,
             auth_header=self.auth_header,
         )
-        return self.actual_data, self.forecast_data
+        return self.forecast_data
 
     def forecast(
         self,

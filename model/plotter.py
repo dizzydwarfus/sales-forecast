@@ -1,10 +1,12 @@
 from typing import Literal
+import os
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from model.prophet_model import SalesModel
 from model.tables_creator import TablesCreator
+from utils.utils import sanitize_filename
 
 
 class Plotter:
@@ -47,14 +49,14 @@ class Plotter:
     ):
         summary_table = go.Table(
             header=dict(
-                values=self.tables_creator.summary_table.columns,
+                values=self.tables_creator.formatted_summary_table.columns,
                 fill_color="paleturquoise",
                 align="left",
             ),
             cells=dict(
                 values=[
-                    self.tables_creator.summary_table[col]
-                    for col in self.tables_creator.summary_table.columns
+                    self.tables_creator.formatted_summary_table[col]
+                    for col in self.tables_creator.formatted_summary_table.columns
                 ],
                 fill_color="lavender",
                 align="left",
@@ -128,7 +130,7 @@ class Plotter:
         )
         return metrics_table
 
-    def plot(self):
+    def plot(self, forecast_plots_path: str):
         self.figure.add_trace(
             go.Scatter(
                 x=self.sales_model.grouped_data["ds"],
@@ -227,3 +229,9 @@ class Plotter:
         )
 
         self.figure.show()
+        self.figure.write_html(
+            os.path.join(
+                forecast_plots_path,
+                f"{sanitize_filename("_".join([v for v in self.sales_model.filters.values() if v is not None]))}_forecast.html",
+            )
+        )

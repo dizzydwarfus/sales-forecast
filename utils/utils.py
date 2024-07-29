@@ -2,6 +2,12 @@ import pandas as pd
 import numpy as np
 import requests
 from utils.access_token import AccessToken
+import re
+
+
+def sanitize_filename(filename):
+    # Replace any character that is not alphanumeric, underscore, or hyphen with an underscore
+    return re.sub(r"[^\w\-]", "_", filename)
 
 
 def generate_auth_header(domain: str, payload: dict) -> dict:
