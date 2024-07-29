@@ -23,15 +23,9 @@ from utils._constants import (
     DOMAIN,
     API_VERSION,
 )
-from utils.utils import get_data, format_euro
+from utils.utils import format_euro, get_sales_data, generate_auth_header
 
 load_dotenv(".env")
-
-from utils.utils import (
-    format_euro,
-    generate_auth_header,
-    get_sales_data,
-)
 
 
 def model_and_plot(
@@ -505,7 +499,5 @@ if __name__ == "__main__":
         period_forecast.to_excel(writer, sheet_name="Monthly Forecast", index=False)
         filtered_sales_summary.to_excel(writer, sheet_name="Summary", index=False)
 
-# TODO: Hyparamter tune for each dimension combination
-# TODO: Use Prophet's built-in cross validation for each dimension combination
 # TODO: Aggregate all results into a single dataframe and save to excel
 # TODO: Create streamlit app for interactive forecasting and evaluation - input: sales_data, filters, parameters output: plot, summary, evaluation
