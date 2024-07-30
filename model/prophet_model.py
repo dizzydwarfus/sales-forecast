@@ -22,25 +22,31 @@ class SalesModel(Prophet):
         *args,
         sales_data: pd.DataFrame = None,
         region: Literal["Europe", "Americas", "APAC"] = None,
-        business_line: Literal["AES", "PBF", "LFS", "AMS"] = None,
-        product_family: str = None,
-        product_subfamily: str = None,
         sales_channel: Literal[
             "DISTRIBUTOR & RESELLER", "MACHINE MAKER", "INDUSTRY", "SERVICE BUREAU"
         ] = None,
+        business_line: Literal["AES", "PBF", "LFS", "AMS"] = None,
+        product_family: str = None,
+        product_subfamily: str = None,
+        product_id: str = None,
+        product_description: str = None,
+        date_col: str = "Date",
         target_col: Literal[
             "Total Sales", "Material Quantity (kg)", "Quantity in SKUs"
         ] = "Total Sales",
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.date_col = date_col
         self.target_col = target_col
         self.filters = {
             "Region": region,
+            "Channel": sales_channel,
             "BL Short": business_line,
             "Product Family": product_family,
             "Product Subfamily": product_subfamily,
-            "Channel": sales_channel,
+            "Product Id": product_id,
+            "Product Description": product_description,
         }
         self._test_data = pd.read_csv(
             "https://raw.githubusercontent.com/facebook/prophet/main/examples/example_wp_log_peyton_manning.csv",
@@ -73,14 +79,22 @@ class SalesModel(Prophet):
     # post-init to format and process sales data
     def _post_init(self):
         self.data = self._filter_sales_data(
-            self._format_sales_data(self.data, self.target_col),
-            self.filters,
+            raw_data=self._format_sales_data(
+                data=self.data,
+                date_col=self.date_col,
+                target_col=self.target_col,
+            ),
+            filters=self.filters,
         )
+
         self.grouped_data = self._group_sales_data(
-            self.data,
-            self.filters,
+            data=self.data,
+            filters=self.filters,
         )
-        self.resampled_data = self._resample_sales_data(self.grouped_data, "D")
+        self.resampled_data = self._resample_sales_data(
+            data=self.grouped_data,
+            freq="D",
+        )
 
     @staticmethod
     def _format_sales_data(
@@ -123,7 +137,7 @@ class SalesModel(Prophet):
         raw_data = raw_data[raw_data["y"] >= 0]
 
         for k, v in filters.items():
-            if v is not None:
+            if v is not None and k != "Product Description":
                 raw_data = raw_data.query(f"`{k}` == '{v}'")
         if raw_data.empty:
             raise ValueError("No data found for the given filters.")

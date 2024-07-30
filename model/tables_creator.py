@@ -26,7 +26,6 @@ class TablesCreator:
             how="left",
             suffixes=("_forecast", "_actual"),
         )
-        # TODO: replace all nan with 0
         self.summary_table, self.formatted_summary_table = self._create_summary_table()
         self.forecast_table, self.formatted_forecast = self._create_forecast_table(
             period=evaluation_period
@@ -195,14 +194,16 @@ class TablesCreator:
 
     def _create_metrics(self) -> pd.DataFrame:
         # Calculate evaluation metrics
-        total_sales = self.forecast_and_actuals["y"].sum()
-        total_forecasted_sales = self.forecast_and_actuals["yhat"].sum()
-        y_true = self.forecast_and_actuals["y"].values
-        y_pred = self.forecast_and_actuals["yhat"].values
+        forecast_for_metrics = self.forecast_and_actuals.dropna(subset=["y", "yhat"])
+
+        total_sales = forecast_for_metrics["y"].sum()
+        total_forecasted_sales = forecast_for_metrics["yhat"].sum()
+        y_true = forecast_for_metrics["y"].values
+        y_pred = forecast_for_metrics["yhat"].values
         mae = mean_absolute_error(y_true[: len(y_pred)], y_pred)
         mape = (
-            (self.forecast_and_actuals["yhat"] - self.forecast_and_actuals["y"]).abs()
-            / self.forecast_and_actuals["y"]
+            (forecast_for_metrics["yhat"] - forecast_for_metrics["y"]).abs()
+            / forecast_for_metrics["y"]
         ).mean()
         mape = np.mean(
             np.abs((y_true - y_pred) / np.where(y_true == 0, 1, y_true))

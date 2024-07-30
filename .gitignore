@@ -5,3 +5,4 @@ scm_forecast_topic.ipynb
 *.log
 data/
 .DS_Store
+*.log

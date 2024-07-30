@@ -130,11 +130,11 @@ class Plotter:
         )
         return metrics_table
 
-    def plot(self, forecast_plots_path: str):
+    def plot(self, show: bool = True, forecast_plots_path: str = "forecast_plots"):
         self.figure.add_trace(
             go.Scatter(
                 x=self.sales_model.grouped_data["ds"],
-                y=self.sales_model.resampled_data["y"],
+                y=self.sales_model.grouped_data["y"],
                 mode="lines",
                 name="Unmodified Sales",
             ),
@@ -228,7 +228,9 @@ class Plotter:
             showlegend=True,
         )
 
-        self.figure.show()
+        if show:
+            self.figure.show()
+
         self.figure.write_html(
             os.path.join(
                 forecast_plots_path,

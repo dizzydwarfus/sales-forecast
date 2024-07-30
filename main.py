@@ -1,9 +1,11 @@
+# %%
 # Third-Party Imports
 import pandas as pd
 
 # Built-in Imports
 import sys
 import os
+import traceback
 
 sys.path.append(os.path.abspath(".."))
 sys.path.append(os.path.abspath("."))
@@ -20,53 +22,118 @@ from utils._constants import (
     DOMAIN,
     API_VERSION,
 )
+from utils.logger import MyLogger
+
+# Logger Setup
+current_filename = os.path.basename(__file__)
+logger = MyLogger(name=current_filename).get_logger()
 
 FOLDER_PATH = r"C:\Users\Lian.Zhen-Yang\BASF 3D Printing Solutions GmbH\Revenue Operations - General\06. Requests\SNOP FC Breakdown"
-SALES_PATH = r"SCM Forecast - Sales Topic_Summary.csv"
+SALES_PATH = r"data\SCM Forecast - Sales Topic_Summary.csv"
 sales_data = get_sales_data(os.path.join(FOLDER_PATH, SALES_PATH))
 
-# # Auth Setup
-# auth = AccessToken(domain=DOMAIN, payload=PAYLOAD)
-# auth.generate_access_token()
-# auth_header = {
-#     "Content-Type": "application/json",
-#     "Authorization": f"Bearer {auth.access_token}",
-# }
+# Auth Setup
+try:
+    auth = AccessToken(domain=DOMAIN, payload=PAYLOAD)
+    auth.generate_access_token()
+    auth_header = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {auth.access_token}",
+    }
+except Exception as e:
+    logger.error("Failed to generate access token.")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
 
-# # Salesforce Queries
-# api_endpoint = DOMAIN + f"/services/data/v{API_VERSION}/query/?q="
+# Salesforce Queries
+api_endpoint = DOMAIN + f"/services/data/v{API_VERSION}/query/?q="
 
-# FORECAST_QUERY = """SELECT
-# Account__c, Account__r.Name, CreatedDate, Date__c, Amount__c, CreatedById, CreatedBy.Name, Account__r.Region__c, CurrencyIsoCode, Business_line__c, Product_Family__c
-# FROM Forecast__c
-# WHERE Account__c != null
-# """
-# FORECAST_QUERY = FORECAST_QUERY.replace("\n", "").replace(" ", "+").strip()
+FORECAST_QUERY = """SELECT 
+Account__c, Account__r.Name, Account__r.Channel__c, CreatedDate, Date__c, Amount__c, CreatedById, CreatedBy.Name, Account__r.Region__c, CurrencyIsoCode, Business_line__c, Product_Family__c 
+FROM Forecast__c 
+WHERE Account__c != null and Account__r.Name != 'NorthAmerica test'
+"""
+FORECAST_QUERY = FORECAST_QUERY.replace("\n", "").replace(" ", "+").strip()
 
-# # Forecast with Saleesforce Forecasts Model
-# fc_model = ForecastRatioModel(
-#     sales_data=sales_data,
-#     domain=DOMAIN,
-#     auth_header=auth_header,
-#     api_endpoint=api_endpoint,
-#     forecast_query=FORECAST_QUERY,
-# )
-# fc_model.forecast(
-#     train_start="2020-01-01",
-#     train_end="2023-06-01",
-#     forecast_start="2023-06-01",
-#     forecast_end="2024-07-01",
-# )
-# fc_model.evaluate(
-#     forecast_start="2023-06-01",
-#     forecast_end="2024-07-01",
-# )
-# fc_model.save(os.path.join(FOLDER_PATH, "forecast_ratio_model.xlsx"))
+# Forecast with Salesforce Forecasts Model
+try:
+    fc_model = ForecastRatioModel(
+        sales_data=sales_data,
+        domain=DOMAIN,
+        auth_header=auth_header,
+        api_endpoint=api_endpoint,
+        forecast_query=FORECAST_QUERY,
+    )
+except Exception as e:
+    logger.error("Failed to create ForecastRatioModel.")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
 
+try:
+    fc_model.forecast(
+        train_start="2022-01-01",
+        train_end="2023-06-01",
+        forecast_start="2023-06-01",
+        forecast_end="2024-07-01",
+    )
+except Exception as e:
+    logger.error("Failed to forecast with ForecastRatioModel.")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
+# %%
+try:
+    fc_model.evaluate(
+        forecast_start="2023-06-01",
+        forecast_end="2024-07-01",
+    )
+except Exception as e:
+    logger.error("Failed to evaluate ForecastRatioModel.")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
+
+try:
+    fc_model.save(
+        os.path.join(FOLDER_PATH, "model excels", "forecast_ratio_model.xlsx")
+    )
+    logger.info(f"Successfully saved forecast_ratio_model.xlsx to {FOLDER_PATH}.")
+except Exception as e:
+    logger.error("Failed to save ForecastRatioModel.")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
+
+# %%
 # Forecast with Prophet Model - Only for a single dimension
 ## Need to loop through all combinations of dimensions and aggregate to get full forecast over a period
+agg_sales_data = (
+    sales_data.groupby(
+        [
+            "Region",
+            "BL Short",
+            "Product Family",
+            "Product Subfamily",
+            "Product Id",
+            "Product Description",
+        ]
+    )
+    .agg({"Total Sales": ["sum", "count"]})
+    .reset_index()
+    .sort_values(by=[("Total Sales", "count")], ascending=False)
+)
+
+agg_sales_data.columns = [" ".join(cols).strip() for cols in agg_sales_data.columns]
+
 ALL_DIMENSIONS = (
-    sales_data[["Region", "BL Short", "Product Family", "Product Subfamily", "Channel"]]
+    agg_sales_data[
+        [
+            "Region",
+            "BL Short",
+            "Product Family",
+            "Product Subfamily",
+            "Product Id",
+            "Product Description",
+            # "Channel",
+        ]
+    ]
     .drop_duplicates()
     .dropna()
 )
@@ -85,17 +152,26 @@ all_forecast_tables = []
 all_summary_tables = []
 failed_dimensions = []
 
-for dimension in dimensions_loop[:11]:
+for dimension in dimensions_loop[:]:
     try:
         sales_model = SalesModel(
             sales_data=sales_data,
             region=dimension.get("Region"),
+            sales_channel=dimension.get("Channel"),
             business_line=dimension.get("BL Short"),
             product_family=dimension.get("Product Family"),
             product_subfamily=dimension.get("Product Subfamily"),
-            sales_channel=dimension.get("Channel"),
+            product_id=dimension.get("Product Id"),
+            product_description=dimension.get("Product Description"),
             seasonality_mode="multiplicative",
         )
+    except Exception as e:
+        logger.error(f"Failed to create SalesModel for {dimension}.")
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        failed_dimensions.append(dimension)
+        continue
+
         # sales_model.create_holidays(
         #     country_list=[
         #         "US",
@@ -134,18 +210,34 @@ for dimension in dimensions_loop[:11]:
         #         "CY",
         #     ]
         # )
+    try:
         sales_model.train()
         sales_model.forecast(
             future_periods=365,
             freq="D",
             include_history=True,
         )
-        sales_model.evaluate(
-            initial="730 days",
-            period="184 days",
-            horizon="365 days",
-        )
+    except Exception as e:
+        logger.error(f"Failed to train and forecast SalesModel for {dimension}.")
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        failed_dimensions.append(dimension)
+        continue
 
+    try:
+        sales_model.evaluate(
+            initial="365 days",
+            period="184 days",
+            horizon="184 days",
+        )
+    except Exception as e:
+        logger.error(f"Failed to evaluate SalesModel for {dimension}.")
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        failed_dimensions.append(dimension)
+        continue
+
+    try:
         tables_creator = TablesCreator(
             filtered_sales_data=sales_model.data,
             grouped_sales_data=sales_model.grouped_data,
@@ -153,14 +245,29 @@ for dimension in dimensions_loop[:11]:
             forecasted_sales_data=sales_model.forecast_df,
             evaluation_period="month",
         )
+    except Exception as e:
+        logger.error(f"Failed to create TablesCreator for {dimension}.")
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        failed_dimensions.append(dimension)
+        continue
 
+    try:
         plotter = Plotter(
             sales_model=sales_model,
             tables_creator=tables_creator,
             evaluation_period="month",
         )
-        plotter.plot(forecast_plots_path=FORECAST_PLOTS_PATH)
+        plotter.plot(show=False, forecast_plots_path=FORECAST_PLOTS_PATH)
 
+    except Exception as e:
+        logger.error(f"Failed to plot data for {dimension}.")
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        failed_dimensions.append(dimension)
+        continue
+
+    try:
         # label all data with dimension
         def label_tables(data: pd.DataFrame, dimension: dict):
             data["Region"] = dimension.get("Region")
@@ -194,40 +301,63 @@ for dimension in dimensions_loop[:11]:
         )
         all_summary_tables.append(label_tables(tables_creator.summary_table, dimension))
 
+        logger.info(f"Successfully modelled data with dimension: {dimension}")
+
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Failed to label data with {dimension}.")
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
         failed_dimensions.append(dimension)
         continue
 
 # combine all data
-all_sales_data = pd.concat(all_sales_data)
-all_grouped_sales_data = pd.concat(all_grouped_sales_data)
-all_resampled_sales_data = pd.concat(all_resampled_sales_data)
-all_forecasted_sales_data = pd.concat(all_forecasted_sales_data)
-all_sales_perf_metrics_data = pd.concat(all_sales_perf_metrics_data)
-all_forecast_and_actuals_data = pd.concat(all_forecast_and_actuals_data)
-all_metrics_data = pd.concat(all_metrics_data)
-all_forecast_tables = pd.concat(all_forecast_tables)
-all_summary_tables = pd.concat(all_summary_tables)
-all_failed_dimensions = pd.DataFrame(failed_dimensions)
+try:
+    all_sales_data = pd.concat(all_sales_data)
+    all_grouped_sales_data = pd.concat(all_grouped_sales_data)
+    all_resampled_sales_data = pd.concat(all_resampled_sales_data)
+    all_forecasted_sales_data = pd.concat(all_forecasted_sales_data)
+    all_sales_perf_metrics_data = pd.concat(all_sales_perf_metrics_data)
+    all_forecast_and_actuals_data = pd.concat(all_forecast_and_actuals_data)
+    all_metrics_data = pd.concat(all_metrics_data)
+    all_forecast_tables = pd.concat(all_forecast_tables)
+    all_summary_tables = pd.concat(all_summary_tables)
+    all_failed_dimensions = pd.DataFrame(failed_dimensions)
+except Exception as e:
+    logger.error("Failed to combine all data.")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
+    failed_dimensions.append(dimension)
 
+try:
+    prophet_model_file_path = os.path.join(
+        FOLDER_PATH, "model excels", "prophet_model.xlsx"
+    )
+    with pd.ExcelWriter(prophet_model_file_path) as writer:
+        # all_sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
+        # all_grouped_sales_data.to_excel(writer, sheet_name="grouped_sales", index=False)
+        # all_resampled_sales_data.to_excel(writer, sheet_name="resampled_sales", index=False)
+        all_forecasted_sales_data.to_excel(
+            writer, sheet_name="forecasted_sales", index=False
+        )
+        # all_forecast_and_actuals_data.to_excel(
+        #     writer, sheet_name="forecast_and_actuals", index=False
+        # )
+        all_forecast_tables.to_excel(
+            writer, sheet_name="forecast_summary_table", index=False
+        )
+        all_summary_tables.to_excel(writer, sheet_name="summary_table", index=False)
+        # all_sales_perf_metrics_data.to_excel(
+        #     writer, sheet_name="performance_metrics", index=False
+        # )
+        all_metrics_data.to_excel(writer, sheet_name="metrics_data", index=False)
+        all_failed_dimensions.to_excel(
+            writer, sheet_name="failed_dimensions", index=False
+        )
 
-with pd.ExcelWriter(os.path.join(FOLDER_PATH, "prophet_model.xlsx")) as writer:
-    # all_sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
-    # all_grouped_sales_data.to_excel(writer, sheet_name="grouped_sales", index=False)
-    # all_resampled_sales_data.to_excel(writer, sheet_name="resampled_sales", index=False)
-    all_forecasted_sales_data.to_excel(
-        writer, sheet_name="forecasted_sales", index=False
-    )
-    # all_forecast_and_actuals_data.to_excel(
-    #     writer, sheet_name="forecast_and_actuals", index=False
-    # )
-    all_forecast_tables.to_excel(
-        writer, sheet_name="forecast_summary_table", index=False
-    )
-    all_summary_tables.to_excel(writer, sheet_name="summary_table", index=False)
-    # all_sales_perf_metrics_data.to_excel(
-    #     writer, sheet_name="performance_metrics", index=False
-    # )
-    all_metrics_data.to_excel(writer, sheet_name="metrics_data", index=False)
-    all_failed_dimensions.to_excel(writer, sheet_name="failed_dimensions", index=False)
+    logger.info(f"Successfully saved data to excel: {prophet_model_file_path}")
+
+except Exception as e:
+    logger.error(f"Failed to save data to excel: {prophet_model_file_path}")
+    logger.error(f"{type(e).__name__}: {e}")
+    logger.error(traceback.format_exc())
+# %%

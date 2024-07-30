@@ -20,6 +20,10 @@ class ForecastRatioModel:
         self.forecast_query = forecast_query
         self.actual_data = sales_data
         self.forecast_data = self._get_forecast_data()
+        self.sku_sales_totals = None
+        self.group_sales_totals = None
+        self.sku_sales_percentage = None
+        self.filtered_forecast = None
         self.forecast_sku = None
         self.forecast_sku_actual_sales = None
 
@@ -30,6 +34,7 @@ class ForecastRatioModel:
             domain=self.domain,
             api_endpoint=self.api_endpoint,
             auth_header=self.auth_header,
+            forecast_query=self.forecast_query,
         )
         return self.forecast_data
 
@@ -52,66 +57,124 @@ class ForecastRatioModel:
             "Date >= @train_start & Date < @train_end"
         ).copy()
 
+        # remove negative sales
+        historical_sales = historical_sales[historical_sales["Total Sales"] >= 0]
+
         # use forecast data for the next year (this determines the forecast period)
-        forecast = self.forecast_data.query(
+        self.filtered_forecast = self.forecast_data.query(
             "Date__c >= @forecast_start & Date__c < @forecast_end"
         ).copy()
 
         # Extract month and year for grouping
         historical_sales["Month"] = historical_sales["Date"].dt.month_name()
-        forecast["Month"] = forecast["Date__c"].dt.month_name()
+        self.filtered_forecast["Month"] = self.filtered_forecast[
+            "Date__c"
+        ].dt.month_name()
+
+        # create year-month column for grouping
+        historical_sales["Year-Month"] = historical_sales["Date"].dt.to_period("M")
+        self.filtered_forecast["Year-Month"] = self.filtered_forecast[
+            "Date__c"
+        ].dt.to_period("M")
 
         # Calculate total sales per SKU per grouping
-        sku_sales_totals = (
+        # grouping by Month to take long-term trends into account
+        self.sku_sales_totals = (
             historical_sales.groupby(
                 [
                     "Account Id",
-                    "Account Name",
+                    # "Account Name",
+                    "Region",
+                    "Channel",
                     "BL Short",
                     "Product Family",
-                    "Month",
+                    "Product Subfamily",
                     "Product Id",
                     "Local Item Code",
                     "Local Item Description",
+                    "Month",
                 ]
             )["Total Sales"]
             .sum()
             .reset_index()
         )
 
-        group_sales_totals = (
+        self.group_sales_totals = (
             historical_sales.groupby(
-                ["Account Id", "Account Name", "BL Short", "Product Family", "Month"]
+                [
+                    "Account Id",
+                    # "Account Name",
+                    "Region",
+                    "Channel",
+                    "BL Short",
+                    "Product Family",
+                    # "Product Subfamily",
+                    "Month",
+                ]
             )["Total Sales"]
             .sum()
             .reset_index()
         )
 
         # Merge to calculate SKU percentage
-        sku_sales_percentage = pd.merge(
-            sku_sales_totals,
-            group_sales_totals,
-            on=["Account Id", "BL Short", "Product Family", "Month"],
+        self.sku_sales_percentage = pd.merge(
+            self.sku_sales_totals,
+            self.group_sales_totals,
+            on=[
+                "Account Id",
+                "Region",
+                "Channel",
+                "BL Short",
+                "Product Family",
+                # "Product Subfamily",
+                "Month",
+            ],
             suffixes=("_sku", "_total"),
         )
-        sku_sales_percentage["SKU_Percentage"] = (
-            sku_sales_percentage["Total Sales_sku"]
-            / sku_sales_percentage["Total Sales_total"]
+        self.sku_sales_percentage["SKU_Percentage"] = (
+            self.sku_sales_percentage["Total Sales_sku"]
+            / self.sku_sales_percentage["Total Sales_total"]
         )
 
         # Merge forecast data with SKU percentage distribution
-        forecast = forecast.rename(
+        self.filtered_forecast = self.filtered_forecast.rename(
             columns={
                 "Account__c": "Account Id",
+                "Account__r.Name": "Account Name",
                 "Business_line__c": "BL Short",
                 "Product_Family__c": "Product Family",
+                "Account__r.Region__c": "Region",
+                "Account__r.Channel__c": "Channel",
             }
         )
+
+        self.filtered_forecast = (
+            self.filtered_forecast.groupby(
+                [
+                    "Account Id",
+                    "Account Name",
+                    "Region",
+                    "Channel",
+                    "BL Short",
+                    "Product Family",
+                    "Year-Month",
+                    "Month",
+                ]
+            )["Amount__c"]
+            .sum()
+            .reset_index()
+        )
+        self.filtered_forecast["Channel"] = self.filtered_forecast[
+            "Channel"
+        ].str.upper()
+
         self.forecast_sku = pd.merge(
-            forecast,
-            sku_sales_percentage,
+            self.filtered_forecast,
+            self.sku_sales_percentage,
             on=[
                 "Account Id",
+                "Region",
+                "Channel",
                 "BL Short",
                 "Product Family",
                 "Month",
@@ -128,17 +191,6 @@ class ForecastRatioModel:
         self.forecast_sku["Allocated_SKU_Sales"] = self.forecast_sku[
             "Allocated_SKU_Sales"
         ].fillna(0)
-        self.forecast_sku.drop(
-            columns=[
-                "Account__r.Name",
-                "Account__r.Region__c",
-                "CreatedDate",
-                "CreatedById",
-                "CreatedBy.Name",
-                "Month",
-            ],
-            inplace=True,
-        )
 
         return self.forecast_sku
 
@@ -159,25 +211,30 @@ class ForecastRatioModel:
             actual_sales.groupby(
                 [
                     "Account Id",
+                    "Account Name",
+                    "Region",
+                    "Channel",
                     "BL Short",
                     "Product Family",
-                    "Year-Month",
+                    "Product Subfamily",
                     "Product Id",
-                ]
+                    "Local Item Code",
+                    "Local Item Description",
+                    "Year-Month",
+                ],
             )["Total Sales"]
             .sum()
             .reset_index()
         )
-
-        forecast_sku["Year-Month"] = forecast_sku["Date__c"].dt.to_period("M")
 
         self.forecast_sku_actual_sales = pd.merge(
             forecast_sku,
             actual_sku_sales_totals,
             on=[
                 "Account Id",
+                "Region",
+                "Channel",
                 "BL Short",
-                "Product Family",
                 "Year-Month",
                 "Product Id",
             ],
@@ -194,9 +251,9 @@ class ForecastRatioModel:
 
     def save(self, filename: str):
         with pd.ExcelWriter(filename) as writer:
-            self.actual_data.to_excel(writer, sheet_name="actual_data")
-            self.forecast_data.to_excel(writer, sheet_name="forecast_data")
-            self.forecast_sku.to_excel(writer, sheet_name="forecast_sku")
+            self.actual_data.to_excel(writer, sheet_name="actual_data", index=False)
+            self.forecast_data.to_excel(writer, sheet_name="forecast_data", index=False)
+            self.forecast_sku.to_excel(writer, sheet_name="forecast_sku", index=False)
             self.forecast_sku_actual_sales.to_excel(
-                writer, sheet_name="forecast_sku_actual_sales"
+                writer, sheet_name="forecast_sku_actual_sales", index=False
             )

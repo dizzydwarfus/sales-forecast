@@ -83,15 +83,8 @@ def format_euro(value):
 
 
 def get_forecast_data(
-    domain: str, api_endpoint: str, auth_header: dict
+    domain: str, api_endpoint: str, auth_header: dict, forecast_query: str
 ) -> pd.DataFrame:
-    forecast_query = """SELECT 
-    Account__c, Account__r.Name, CreatedDate, Date__c, Amount__c, CreatedById, CreatedBy.Name, Account__r.Region__c, CurrencyIsoCode, Business_line__c, Product_Family__c 
-    FROM Forecast__c 
-    WHERE Account__c != null
-    """
-    forecast_query = forecast_query.replace("\n", "").replace(" ", "+").strip()
-
     raw_forecast_data = get_data(
         domain=domain,
         api_endpoint=api_endpoint,
@@ -130,6 +123,7 @@ def get_sales_data(sales_path: str) -> pd.DataFrame:
             "Product Family (Account Hierarchy)",
             "Product Subfamily (Account Hierarchy)",
             "Product Id",
+            "Product Description",
             "Local Item Code (Zita)",
             "Local Item Description (Zita)",
             "Date",
