@@ -3,6 +3,7 @@ import sys
 import os
 from typing import Literal, List
 import itertools
+import datetime as dt
 
 sys.path.append(os.path.abspath(".."))
 sys.path.append(os.path.abspath("."))
@@ -34,9 +35,11 @@ class SalesModel(Prophet):
         target_col: Literal[
             "Total Sales", "Material Quantity (kg)", "Quantity in SKUs"
         ] = "Total Sales",
+        prediction_end_date: str = "2024-12-31",
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.prediction_end_date = prediction_end_date
         self.date_col = date_col
         self.target_col = target_col
         self.filters = {
@@ -85,6 +88,7 @@ class SalesModel(Prophet):
                 target_col=self.target_col,
             ),
             filters=self.filters,
+            cutoff_date="2024-04-01",
         )
 
         self.grouped_data = self._group_sales_data(
@@ -133,12 +137,16 @@ class SalesModel(Prophet):
     def _filter_sales_data(
         raw_data: pd.DataFrame,
         filters: dict,
+        cutoff_date: str = "2024-06-01",
     ):
         raw_data = raw_data[raw_data["y"] >= 0]
 
         for k, v in filters.items():
             if v is not None and k != "Product Description":
                 raw_data = raw_data.query(f"`{k}` == '{v}'")
+
+        raw_data = raw_data.query(f"`ds` <= '{cutoff_date}'")
+
         if raw_data.empty:
             raise ValueError("No data found for the given filters.")
         return raw_data
@@ -188,12 +196,20 @@ class SalesModel(Prophet):
     ):
         self.fit(self.resampled_data)
 
+    def _calculate_future_periods(
+        self,
+    ):
+        last_date = self.data["ds"].max()
+        prediction_end_date = dt.datetime.strptime(self.prediction_end_date, "%Y-%m-%d")
+        future_periods = (prediction_end_date - last_date).days
+        return future_periods
+
     def forecast(
         self,
-        future_periods: int = 365,
         freq: Literal["D", "W", "M"] = "D",
         include_history: bool = True,
     ):
+        future_periods = self._calculate_future_periods()
         self.future = self.make_future_dataframe(
             periods=future_periods, freq=freq, include_history=include_history
         )

@@ -1,6 +1,7 @@
 # %%
 # Third-Party Imports
 import pandas as pd
+from dotenv import load_dotenv
 
 # Built-in Imports
 import sys
@@ -24,11 +25,13 @@ from utils._constants import (
 )
 from utils.logger import MyLogger
 
+load_dotenv()
+
 # Logger Setup
 current_filename = os.path.basename(__file__)
 logger = MyLogger(name=current_filename).get_logger()
 
-FOLDER_PATH = r"C:\Users\Lian.Zhen-Yang\BASF 3D Printing Solutions GmbH\Revenue Operations - General\06. Requests\SNOP FC Breakdown"
+FOLDER_PATH = os.getenv("SNOP_BREAKDOWN_PATH")
 SALES_PATH = r"data\SCM Forecast - Sales Topic_Summary.csv"
 sales_data = get_sales_data(os.path.join(FOLDER_PATH, SALES_PATH))
 
@@ -113,11 +116,12 @@ agg_sales_data = (
             "Product Subfamily",
             "Product Id",
             "Product Description",
+            "Channel",
         ]
     )
     .agg({"Total Sales": ["sum", "count"]})
     .reset_index()
-    .sort_values(by=[("Total Sales", "count")], ascending=False)
+    .sort_values(by=[("Total Sales", "sum")], ascending=False)
 )
 
 agg_sales_data.columns = [" ".join(cols).strip() for cols in agg_sales_data.columns]
@@ -131,13 +135,14 @@ ALL_DIMENSIONS = (
             "Product Subfamily",
             "Product Id",
             "Product Description",
-            # "Channel",
+            "Channel",
         ]
     ]
     .drop_duplicates()
     .dropna()
 )
 dimensions_loop = ALL_DIMENSIONS.to_dict(orient="records")
+logger.info(f"Total number of dimensions: {len(dimensions_loop)}")
 
 FORECAST_PLOTS_PATH = os.path.join(FOLDER_PATH, "forecast_plots")
 
@@ -152,7 +157,17 @@ all_forecast_tables = []
 all_summary_tables = []
 failed_dimensions = []
 
-for dimension in dimensions_loop[:]:
+for dimension in dimensions_loop[:100]:
+    if dimension.get("BL Short") == "AMS":
+        logger.info(f"Skipping dimension: {dimension} because AMS.")
+        continue
+
+    if (
+        dimension.get("Product Subfamily") == "Other"
+        and dimension.get("Product Subfamily") == "Other"
+    ):
+        logger.info(f"Skipping dimension: {dimension} because Other.")
+        continue
     try:
         sales_model = SalesModel(
             sales_data=sales_data,
@@ -163,6 +178,7 @@ for dimension in dimensions_loop[:]:
             product_subfamily=dimension.get("Product Subfamily"),
             product_id=dimension.get("Product Id"),
             product_description=dimension.get("Product Description"),
+            prediction_end_date="2024-12-31",
             seasonality_mode="multiplicative",
         )
     except Exception as e:
@@ -213,7 +229,6 @@ for dimension in dimensions_loop[:]:
     try:
         sales_model.train()
         sales_model.forecast(
-            future_periods=365,
             freq="D",
             include_history=True,
         )
@@ -272,9 +287,11 @@ for dimension in dimensions_loop[:]:
         def label_tables(data: pd.DataFrame, dimension: dict):
             data["Region"] = dimension.get("Region")
             data["Business Line"] = dimension.get("BL Short")
+            data["Channel"] = dimension.get("Channel")
             data["Product Family"] = dimension.get("Product Family")
             data["Product Subfamily"] = dimension.get("Product Subfamily")
-            data["Channel"] = dimension.get("Channel")
+            data["Product Id"] = dimension.get("Product Id")
+            data["Product Description"] = dimension.get("Product Description")
             return data
 
         all_sales_data.append(label_tables(tables_creator.sales_data, dimension))
@@ -332,6 +349,7 @@ try:
     prophet_model_file_path = os.path.join(
         FOLDER_PATH, "model excels", "prophet_model.xlsx"
     )
+    sales_data["month"] = sales_data["Date"].dt.to_period("M")
     with pd.ExcelWriter(prophet_model_file_path) as writer:
         # all_sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
         # all_grouped_sales_data.to_excel(writer, sheet_name="grouped_sales", index=False)
@@ -353,6 +371,7 @@ try:
         all_failed_dimensions.to_excel(
             writer, sheet_name="failed_dimensions", index=False
         )
+        sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
 
     logger.info(f"Successfully saved data to excel: {prophet_model_file_path}")
 
