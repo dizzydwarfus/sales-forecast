@@ -43,7 +43,7 @@ class ForecastRatioModel:
         train_start: str = "2020-01-01",
         train_end: str = "2023-06-01",
         forecast_start: str = "2023-06-01",
-        forecast_end: str = "2024-07-01",
+        forecast_end: str = "2025-12-31",
     ):
         train_start, train_end, forecast_start, forecast_end = [
             train_start,
@@ -77,6 +77,10 @@ class ForecastRatioModel:
             "Date__c"
         ].dt.to_period("M")
 
+        # create year column for grouping
+        historical_sales["Year"] = historical_sales["Date"].dt.year
+        self.filtered_forecast["Year"] = self.filtered_forecast["Date__c"].dt.year
+
         # Calculate total sales per SKU per grouping
         # grouping by Month to take long-term trends into account
         self.sku_sales_totals = (
@@ -92,7 +96,7 @@ class ForecastRatioModel:
                     "Product Id",
                     "Local Item Code",
                     "Local Item Description",
-                    "Month",
+                    # "Month",
                 ]
             )["Total Sales"]
             .sum()
@@ -109,7 +113,7 @@ class ForecastRatioModel:
                     "BL Short",
                     "Product Family",
                     # "Product Subfamily",
-                    "Month",
+                    # "Month",
                 ]
             )["Total Sales"]
             .sum()
@@ -127,7 +131,7 @@ class ForecastRatioModel:
                 "BL Short",
                 "Product Family",
                 # "Product Subfamily",
-                "Month",
+                # "Month",
             ],
             suffixes=("_sku", "_total"),
         )
@@ -157,8 +161,9 @@ class ForecastRatioModel:
                     "Channel",
                     "BL Short",
                     "Product Family",
-                    "Year-Month",
-                    "Month",
+                    # "Year-Month",
+                    # "Month",
+                    "Year",
                 ]
             )["Amount__c"]
             .sum()
@@ -177,7 +182,7 @@ class ForecastRatioModel:
                 "Channel",
                 "BL Short",
                 "Product Family",
-                "Month",
+                # "Month",
             ],
             how="left",
         )
@@ -206,6 +211,7 @@ class ForecastRatioModel:
         ).copy()
 
         actual_sales["Year-Month"] = actual_sales["Date"].dt.to_period("M")
+        actual_sales["Year"] = actual_sales["Date"].dt.year
 
         actual_sku_sales_totals = (
             actual_sales.groupby(
@@ -220,7 +226,8 @@ class ForecastRatioModel:
                     "Product Id",
                     "Local Item Code",
                     "Local Item Description",
-                    "Year-Month",
+                    # "Year-Month",
+                    "Year",
                 ],
             )["Total Sales"]
             .sum()
@@ -235,7 +242,8 @@ class ForecastRatioModel:
                 "Region",
                 "Channel",
                 "BL Short",
-                "Year-Month",
+                # "Year-Month",
+                "Year",
                 "Product Id",
             ],
             how="left",

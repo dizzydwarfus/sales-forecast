@@ -1,4 +1,3 @@
-# %%
 # Third-Party Imports
 import pandas as pd
 from dotenv import load_dotenv
@@ -34,6 +33,16 @@ logger = MyLogger(name=current_filename).get_logger()
 FOLDER_PATH = os.getenv("SNOP_BREAKDOWN_PATH")
 SALES_PATH = r"data\SCM Forecast - Sales Topic_Summary.csv"
 sales_data = get_sales_data(os.path.join(FOLDER_PATH, SALES_PATH))
+
+DIMENSIONS = [
+    "Region",
+    "BL Short",
+    "Channel",
+    "Product Family",
+    "Product Subfamily",
+    "Product Id",
+    "Product Description",
+]
 
 # Auth Setup
 try:
@@ -74,20 +83,20 @@ except Exception as e:
 
 try:
     fc_model.forecast(
-        train_start="2022-01-01",
-        train_end="2023-06-01",
+        train_start="2020-01-01",
+        train_end="2023-09-01",
         forecast_start="2023-06-01",
-        forecast_end="2024-07-01",
+        forecast_end="2025-12-31",
     )
 except Exception as e:
     logger.error("Failed to forecast with ForecastRatioModel.")
     logger.error(f"{type(e).__name__}: {e}")
     logger.error(traceback.format_exc())
-# %%
+
 try:
     fc_model.evaluate(
-        forecast_start="2023-06-01",
-        forecast_end="2024-07-01",
+        forecast_start="2023-09-01",
+        forecast_end="2024-08-01",
     )
 except Exception as e:
     logger.error("Failed to evaluate ForecastRatioModel.")
@@ -104,21 +113,16 @@ except Exception as e:
     logger.error(f"{type(e).__name__}: {e}")
     logger.error(traceback.format_exc())
 
-# %%
+# Exit program if only running ForecastRatioModel
+# Check if sys.argv is passed
+if len(sys.argv) > 1:
+    if sys.argv[1] == "--only-fcratio" or sys.argv[1] == "--fcratio":
+        logger.info("Exiting program after running ForecastRatioModel.")
+        sys.exit()
 # Forecast with Prophet Model - Only for a single dimension
 ## Need to loop through all combinations of dimensions and aggregate to get full forecast over a period
 agg_sales_data = (
-    sales_data.groupby(
-        [
-            "Region",
-            "BL Short",
-            "Product Family",
-            "Product Subfamily",
-            "Product Id",
-            "Product Description",
-            "Channel",
-        ]
-    )
+    sales_data.groupby(DIMENSIONS)
     .agg({"Total Sales": ["sum", "count"]})
     .reset_index()
     .sort_values(by=[("Total Sales", "sum")], ascending=False)
@@ -126,21 +130,7 @@ agg_sales_data = (
 
 agg_sales_data.columns = [" ".join(cols).strip() for cols in agg_sales_data.columns]
 
-ALL_DIMENSIONS = (
-    agg_sales_data[
-        [
-            "Region",
-            "BL Short",
-            "Product Family",
-            "Product Subfamily",
-            "Product Id",
-            "Product Description",
-            "Channel",
-        ]
-    ]
-    .drop_duplicates()
-    .dropna()
-)
+ALL_DIMENSIONS = agg_sales_data[DIMENSIONS].drop_duplicates().dropna()
 dimensions_loop = ALL_DIMENSIONS.to_dict(orient="records")
 logger.info(f"Total number of dimensions: {len(dimensions_loop)}")
 
@@ -157,7 +147,7 @@ all_forecast_tables = []
 all_summary_tables = []
 failed_dimensions = []
 
-for dimension in dimensions_loop[:100]:
+for dimension in dimensions_loop[:]:
     if dimension.get("BL Short") == "AMS":
         logger.info(f"Skipping dimension: {dimension} because AMS.")
         continue
@@ -354,24 +344,24 @@ try:
         # all_sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
         # all_grouped_sales_data.to_excel(writer, sheet_name="grouped_sales", index=False)
         # all_resampled_sales_data.to_excel(writer, sheet_name="resampled_sales", index=False)
-        all_forecasted_sales_data.to_excel(
-            writer, sheet_name="forecasted_sales", index=False
-        )
+        # all_forecasted_sales_data.to_excel(
+        #     writer, sheet_name="forecasted_sales", index=False
+        # )
         # all_forecast_and_actuals_data.to_excel(
         #     writer, sheet_name="forecast_and_actuals", index=False
         # )
         all_forecast_tables.to_excel(
             writer, sheet_name="forecast_summary_table", index=False
         )
-        all_summary_tables.to_excel(writer, sheet_name="summary_table", index=False)
+        # all_summary_tables.to_excel(writer, sheet_name="summary_table", index=False)
         # all_sales_perf_metrics_data.to_excel(
         #     writer, sheet_name="performance_metrics", index=False
         # )
-        all_metrics_data.to_excel(writer, sheet_name="metrics_data", index=False)
+        # all_metrics_data.to_excel(writer, sheet_name="metrics_data", index=False)
         all_failed_dimensions.to_excel(
             writer, sheet_name="failed_dimensions", index=False
         )
-        sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
+        # sales_data.to_excel(writer, sheet_name="raw_sales", index=False)
 
     logger.info(f"Successfully saved data to excel: {prophet_model_file_path}")
 
@@ -379,4 +369,3 @@ except Exception as e:
     logger.error(f"Failed to save data to excel: {prophet_model_file_path}")
     logger.error(f"{type(e).__name__}: {e}")
     logger.error(traceback.format_exc())
-# %%
