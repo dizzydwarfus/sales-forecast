@@ -1,3 +1,4 @@
+# %%
 # Third-Party Imports
 import pandas as pd
 from dotenv import load_dotenv
@@ -61,7 +62,7 @@ except Exception as e:
 api_endpoint = DOMAIN + f"/services/data/v{API_VERSION}/query/?q="
 
 FORECAST_QUERY = """SELECT 
-Account__c, Account__r.Name, Account__r.Channel__c, CreatedDate, Date__c, Amount__c, CreatedById, CreatedBy.Name, Account__r.Region__c, CurrencyIsoCode, Business_line__c, Product_Family__c 
+Account__c, Account__r.Owner.Name, Account__r.Name, Account__r.Channel__c, CreatedDate, Date__c, Amount__c, CreatedById, CreatedBy.Name, Account__r.Region__c, CurrencyIsoCode, Business_line__c, Product_Family__c 
 FROM Forecast__c 
 WHERE Account__c != null and Account__r.Name != 'NorthAmerica test'
 """
@@ -80,7 +81,7 @@ except Exception as e:
     logger.error("Failed to create ForecastRatioModel.")
     logger.error(f"{type(e).__name__}: {e}")
     logger.error(traceback.format_exc())
-
+# %%
 try:
     fc_model.forecast(
         train_start="2020-01-01",
@@ -369,3 +370,5 @@ except Exception as e:
     logger.error(f"Failed to save data to excel: {prophet_model_file_path}")
     logger.error(f"{type(e).__name__}: {e}")
     logger.error(traceback.format_exc())
+
+# %%

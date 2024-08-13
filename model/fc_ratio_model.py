@@ -41,8 +41,8 @@ class ForecastRatioModel:
     def forecast(
         self,
         train_start: str = "2020-01-01",
-        train_end: str = "2023-06-01",
-        forecast_start: str = "2023-06-01",
+        train_end: str = "2023-12-31",
+        forecast_start: str = "2024-01-01",
         forecast_end: str = "2025-12-31",
     ):
         train_start, train_end, forecast_start, forecast_end = [
@@ -145,6 +145,7 @@ class ForecastRatioModel:
             columns={
                 "Account__c": "Account Id",
                 "Account__r.Name": "Account Name",
+                "Account__r.Owner.Name": "Account Owner",
                 "Business_line__c": "BL Short",
                 "Product_Family__c": "Product Family",
                 "Account__r.Region__c": "Region",
@@ -157,6 +158,7 @@ class ForecastRatioModel:
                 [
                     "Account Id",
                     "Account Name",
+                    "Account Owner",
                     "Region",
                     "Channel",
                     "BL Short",
