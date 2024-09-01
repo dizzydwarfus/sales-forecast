@@ -6,3 +6,4 @@ scm_forecast_topic.ipynb
 data/
 .DS_Store
 *.log
+venv312

@@ -263,6 +263,9 @@ class ForecastRatioModel:
         with pd.ExcelWriter(filename) as writer:
             self.actual_data.to_excel(writer, sheet_name="actual_data", index=False)
             self.forecast_data.to_excel(writer, sheet_name="forecast_data", index=False)
+            self.sku_sales_percentage.to_excel(
+                writer, sheet_name="sku_sales_percentage", index=False
+            )
             self.forecast_sku.to_excel(writer, sheet_name="forecast_sku", index=False)
             self.forecast_sku_actual_sales.to_excel(
                 writer, sheet_name="forecast_sku_actual_sales", index=False

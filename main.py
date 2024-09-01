@@ -85,9 +85,9 @@ except Exception as e:
 try:
     fc_model.forecast(
         train_start="2020-01-01",
-        train_end="2023-09-01",
-        forecast_start="2023-06-01",
-        forecast_end="2025-12-31",
+        train_end="2023-12-31",
+        forecast_start="2024-01-01",
+        forecast_end="2024-12-31",
     )
 except Exception as e:
     logger.error("Failed to forecast with ForecastRatioModel.")
@@ -114,6 +114,7 @@ except Exception as e:
     logger.error(f"{type(e).__name__}: {e}")
     logger.error(traceback.format_exc())
 
+# %%
 # Exit program if only running ForecastRatioModel
 # Check if sys.argv is passed
 if len(sys.argv) > 1:
